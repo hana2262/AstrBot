@@ -78,6 +78,17 @@ class PluginManager:
         """加载失败插件的信息，用于后续可能的热重载"""
 
         self.failed_plugin_info = ""
+        """失败插件的格式化描述"""
+
+        self.broken_plugin_dict = {}
+        """损坏插件的信息（目录存在但缺少入口文件）"""
+
+        self.broken_plugin_info = ""
+        """损坏插件的格式化描述，用于前端展示"""
+
+        self._normalized_reserved_path = None
+        """缓存的规范化保留插件路径（性能优化）"""
+
         if os.getenv("ASTRBOT_RELOAD", "0") == "1":
             asyncio.create_task(self._watch_plugins_changes())
 
@@ -144,43 +155,145 @@ class PluginManager:
                 break
         return classes
 
-    @staticmethod
-    def _get_modules(path):
-        modules = []
+    def _get_modules(self, path):
+        """扫描插件目录，返回 (有效模块列表, 损坏插件字典)
 
-        dirs = os.listdir(path)
+        Args:
+            path: 插件目录路径
+
+        Returns:
+            (modules, broken_plugin_dict) 元组
+        """
+        modules = []
+        broken_plugin_dict = {}
+
+        # 获取规范化保留插件路径（使用缓存优化性能）
+        normalized_reserved_path = self._get_normalized_reserved_path()
+
+        # 扫描目录（添加异常保护）
+        try:
+            if not os.path.exists(path):
+                return modules, broken_plugin_dict
+            dirs = os.listdir(path)
+        except PermissionError:
+            logger.warning(f"无权限读取插件目录: {path}")
+            return modules, broken_plugin_dict
+        except OSError as e:
+            logger.warning(f"读取插件目录失败: {path}, 错误: {e}")
+            return modules, broken_plugin_dict
+
         # 遍历文件夹，找到 main.py 或者和文件夹同名的文件
         for d in dirs:
-            if os.path.isdir(os.path.join(path, d)):
-                if os.path.exists(os.path.join(path, d, "main.py")):
-                    module_str = "main"
-                elif os.path.exists(os.path.join(path, d, d + ".py")):
-                    module_str = d
-                else:
-                    logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，跳过。")
-                    continue
-                if os.path.exists(os.path.join(path, d, "main.py")) or os.path.exists(
-                    os.path.join(path, d, d + ".py"),
-                ):
-                    modules.append(
-                        {
-                            "pname": d,
-                            "module": module_str,
-                            "module_path": os.path.join(path, d, module_str),
-                        },
-                    )
-        return modules
+            dir_path = os.path.join(path, d)
+            if os.path.isdir(dir_path):
+                main_file = os.path.join(dir_path, "main.py")
+                module_file = os.path.join(dir_path, f"{d}.py")
 
-    def _get_plugin_modules(self) -> list[dict]:
-        plugins = []
+                # 判断是否为保留插件（使用 samefile + 回退逻辑）
+                is_reserved = self._is_reserved_path(dir_path, normalized_reserved_path)
+
+                if os.path.exists(main_file):
+                    module_str = "main"
+                    modules.append({
+                        "pname": d,
+                        "module": module_str,
+                        "module_path": os.path.join(dir_path, module_str),
+                        "reserved": is_reserved,  # 添加 reserved 字段
+                    })
+                elif os.path.exists(module_file):
+                    module_str = d
+                    modules.append({
+                        "pname": d,
+                        "module": module_str,
+                        "module_path": module_file,
+                        "reserved": is_reserved,  # 添加 reserved 字段
+                    })
+                else:
+                    logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，记录为损坏插件。")
+
+                    # 记录到 broken_plugin_dict
+                    broken_info = {
+                        "name": d,
+                        "reason": "missing_entry_file",
+                        "display_name": d,
+                        "reserved": is_reserved,
+                    }
+
+                    # 尝试读取 metadata.yaml 获取显示名称
+                    metadata_path = os.path.join(dir_path, "metadata.yaml")
+                    if os.path.exists(metadata_path):
+                        try:
+                            with open(metadata_path, 'r', encoding='utf-8') as f:
+                                metadata = yaml.safe_load(f)
+                                broken_info["display_name"] = metadata.get("name", d)
+                        except Exception:
+                            logger.warning(
+                                f"读取插件 {d} 的 metadata.yaml 失败: {traceback.format_exc()}"
+                            )
+
+                    broken_plugin_dict[d] = broken_info
+
+        return modules, broken_plugin_dict
+
+    def _get_normalized_reserved_path(self):
+        """获取并缓存规范化保留插件路径（性能优化）"""
+        if self._normalized_reserved_path is None:
+            try:
+                resolved = Path(self.reserved_plugin_path).resolve(strict=False)
+                self._normalized_reserved_path = resolved
+            except (OSError, RuntimeError) as e:
+                logger.warning(f"无法规范化保留插件路径: {e}")
+                self._normalized_reserved_path = False  # False 表示无法获取
+        return self._normalized_reserved_path if self._normalized_reserved_path else None
+
+    def _is_reserved_path(self, dir_path, normalized_reserved_path):
+        """判断路径是否为保留插件目录
+
+        使用 samefile + 回退逻辑，确保跨平台兼容性
+        """
+        if not normalized_reserved_path:
+            return False
+
+        try:
+            normalized_plugin_path = Path(dir_path).resolve(strict=False)
+            # 使用 samefile 检查是否为同一路径
+            return os.path.samefile(normalized_plugin_path, normalized_reserved_path)
+        except (OSError, ValueError, RuntimeError) as e:
+            # samefile 失败时回退到字符串比较
+            try:
+                plugin_resolved = Path(dir_path).resolve(strict=False)
+                # 比较规范化后的路径字符串（忽略大小写）
+                return str(plugin_resolved).lower() == str(normalized_reserved_path).lower()
+            except (OSError, ValueError, RuntimeError):
+                # 路径解析失败，保守处理为非保留插件
+                logger.debug(f"路径比较失败: {dir_path}, 错误: {e}")
+                return False
+
+    def _get_plugin_modules(self) -> tuple[list, dict]:
+        """获取所有插件模块和损坏插件
+
+        Returns:
+            (有效模块列表, 损坏插件字典) 元组
+        """
+        all_modules = []
+        all_broken = {}
+
+        # 扫描用户插件目录
         if os.path.exists(self.plugin_store_path):
-            plugins.extend(self._get_modules(self.plugin_store_path))
+            modules, broken = self._get_modules(self.plugin_store_path)
+            all_modules.extend(modules)
+            all_broken.update(broken)
+
+        # 扫描保留插件目录
         if os.path.exists(self.reserved_plugin_path):
-            _p = self._get_modules(self.reserved_plugin_path)
-            for p in _p:
-                p["reserved"] = True
-            plugins.extend(_p)
-        return plugins
+            modules, broken = self._get_modules(self.reserved_plugin_path)
+            # 显式标记为保留插件
+            for info in broken.values():
+                info["reserved"] = True
+            all_modules.extend(modules)
+            all_broken.update(broken)
+
+        return all_modules, all_broken
 
     async def _check_plugin_dept_update(
         self, target_plugin: str | None = None
@@ -585,7 +698,15 @@ class PluginManager:
         inactivated_llm_tools = await sp.global_get("inactivated_llm_tools", [])
         alter_cmd = await sp.global_get("alter_cmd", {})
 
-        plugin_modules = self._get_plugin_modules()
+        # 获取插件模块和损坏插件（使用元组返回值）
+        plugin_modules, broken_plugin_dict_temp = self._get_plugin_modules()
+
+        # 更新损坏插件状态（使用锁保护）
+        async with self._pm_lock:
+            self.broken_plugin_dict.clear()
+            self.broken_plugin_dict.update(broken_plugin_dict_temp)
+            self._rebuild_broken_plugin_info()
+
         if plugin_modules is None:
             return False, "未找到任何插件模块"
 
@@ -1251,6 +1372,81 @@ class PluginManager:
 
             self.failed_plugin_dict.pop(dir_name, None)
             self._rebuild_failed_plugin_info()
+
+    async def remove_broken_plugin(
+        self,
+        dir_name: str,
+        delete_config: bool = False,
+        delete_data: bool = False,
+    ) -> None:
+        """移除损坏的插件（按目录名）。
+
+        Args:
+            dir_name: 插件目录名
+            delete_config: 是否删除配置
+            delete_data: 是否删除数据
+
+        Raises:
+            Exception: 插件不存在或为保留插件时抛出
+        """
+        # 先在锁外做基础校验（获取信息不需要持锁）
+        broken_info = self.broken_plugin_dict.get(dir_name)
+        if not broken_info:
+            raise Exception("插件不存在于损坏列表中")
+
+        # 安全校验：禁止删除保留/内置插件
+        if broken_info.get("reserved"):
+            raise Exception("内置插件禁止删除")
+
+        # 确定插件路径（不暴露给前端，后端内部使用）
+        is_reserved = broken_info.get("reserved", False)
+        plugin_path = os.path.join(
+            self.reserved_plugin_path if is_reserved else self.plugin_store_path,
+            dir_name
+        )
+
+        # 实际删除操作（这部分需要持锁）
+        async with self._pm_lock:
+            # 再次检查是否存在（防止并发删除）
+            if dir_name not in self.broken_plugin_dict:
+                raise Exception("插件不存在于损坏列表中")
+
+            # 删除插件目录
+            if await asyncio.to_thread(os.path.exists, plugin_path):
+                try:
+                    remove_dir(plugin_path)
+                except Exception as e:
+                    logger.error(f"删除插件目录失败: {plugin_path}, 错误: {e}")
+                    raise Exception("删除插件目录失败，请检查权限或日志")
+            else:
+                logger.debug("插件目录不存在，视为已部分卸载状态")
+
+            # 清理可选产物（配置、数据）
+            self._cleanup_plugin_optional_artifacts(
+                root_dir_name=dir_name,
+                plugin_label=broken_info.get("display_name") or dir_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+
+            # 移除记录
+            self.broken_plugin_dict.pop(dir_name, None)
+            self._rebuild_broken_plugin_info()
+
+    def _rebuild_broken_plugin_info(self) -> None:
+        """重建损坏插件的描述信息"""
+        if not self.broken_plugin_dict:
+            self.broken_plugin_info = ""
+            return
+
+        lines = ["以下插件已损坏:"]
+        for name, info in self.broken_plugin_dict.items():
+            display_name = info.get("display_name") or name
+            # 使用 reason code 代替硬编码错误信息
+            lines.append(f"  - {display_name}: {info.get('reason', 'unknown')}")
+
+        self.broken_plugin_info = "\n".join(lines)
+        logger.info(self.broken_plugin_info)
 
     async def _unbind_plugin(self, plugin_name: str, plugin_module_path: str) -> None:
         """解绑并移除一个插件。

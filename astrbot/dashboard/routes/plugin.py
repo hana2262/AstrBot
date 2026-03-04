@@ -70,6 +70,8 @@ class PluginRoute(Route):
             "/plugin/source/get": ("GET", self.get_custom_source),
             "/plugin/source/save": ("POST", self.save_custom_source),
             "/plugin/source/get-failed-plugins": ("GET", self.get_failed_plugins),
+            "/plugin/get-broken-plugins": ("GET", self.get_broken_plugins),
+            "/plugin/remove-broken-plugin": ("POST", self.remove_broken_plugin),
         }
         self.core_lifecycle = core_lifecycle
         self.plugin_manager = plugin_manager
@@ -400,6 +402,44 @@ class PluginRoute(Route):
     async def get_failed_plugins(self):
         """专门获取加载失败的插件列表(字典格式)"""
         return Response().ok(self.plugin_manager.failed_plugin_dict).__dict__
+
+    async def get_broken_plugins(self):
+        """获取损坏插件列表（不包含路径等敏感信息）"""
+        # 移除敏感字段，仅返回必要信息
+        plugins = []
+        for dir_name, info in self.plugin_manager.broken_plugin_dict.items():
+            plugins.append({
+                "dir_name": dir_name,
+                "name": info.get("name"),
+                "display_name": info.get("display_name"),
+                "reason": info.get("reason"),
+                "reserved": info.get("reserved", False),
+            })
+        return Response().ok(plugins).__dict__
+
+    async def remove_broken_plugin(self):
+        """移除损坏插件"""
+        if DEMO_MODE:
+            return Response().error("Demo 模式禁止此操作").__dict__
+
+        post_data = await request.get_json()
+        dir_name = post_data.get("dir_name", "")
+        delete_config = post_data.get("delete_config", False)
+        delete_data = post_data.get("delete_data", False)
+
+        if not dir_name:
+            return Response().error("缺少插件目录名").__dict__
+
+        try:
+            await self.plugin_manager.remove_broken_plugin(
+                dir_name,
+                delete_config=delete_config,
+                delete_data=delete_data,
+            )
+            return Response().ok(None, "移除成功").__dict__
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return Response().error(str(e)).__dict__
 
     async def get_plugin_handlers_info(self, handler_full_names: list[str]):
         """解析插件行为"""

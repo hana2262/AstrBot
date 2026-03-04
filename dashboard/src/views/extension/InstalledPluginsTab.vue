@@ -101,11 +101,13 @@ const {
   resetLoadingDialog,
   onLoadingDialogResult,
   failedPluginItems,
+  brokenPluginsList,
   getExtensions,
   reloadFailedPlugin,
   checkUpdate,
   uninstallExtension,
   requestUninstallFailedPlugin,
+  requestRemoveBrokenPlugin,
   handleUninstallConfirm,
   updateExtension,
   showUpdateAllConfirm,
@@ -279,6 +281,62 @@ const {
                           @click="requestUninstallFailedPlugin(plugin.dir_name)"
                         >
                           {{ tm("buttons.uninstall") }}
+                        </v-btn>
+                      </td>
+                    </tr>
+                  </tbody>
+                </v-table>
+              </v-card-text>
+            </v-card>
+
+            <!-- 损坏插件区域 -->
+            <v-card
+              v-if="brokenPluginsList.length > 0"
+              class="mb-4 rounded-lg"
+              variant="tonal"
+              color="error"
+            >
+              <v-card-title class="d-flex align-center">
+                <v-icon color="error" class="mr-2">mdi-alert</v-icon>
+                {{ tm("brokenPlugins.title", { count: brokenPluginsList.length }) }}
+              </v-card-title>
+              <v-card-text class="pt-0">
+                <div class="text-body-2 mb-3">
+                  {{ tm("brokenPlugins.hint") }}
+                </div>
+                <v-table density="compact">
+                  <thead>
+                    <tr>
+                      <th>{{ tm("brokenPlugins.columns.plugin") }}</th>
+                      <th>{{ tm("brokenPlugins.columns.reason") }}</th>
+                      <th class="text-right">{{ tm("buttons.actions") }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="plugin in brokenPluginsList" :key="plugin.dir_name">
+                      <td>
+                        <div class="font-weight-medium">
+                          {{ plugin.display_name }}
+                        </div>
+                        <div class="text-caption text-medium-emphasis">
+                          {{ plugin.dir_name }}
+                        </div>
+                      </td>
+                      <td style="max-width: 520px">
+                        <div class="text-caption text-medium-emphasis">
+                          {{ plugin.reason === 'missing_entry_file' ? tm('brokenPlugins.reasons.missingEntryFile') : tm('status.unknown') }}
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <v-btn
+                          size="small"
+                          variant="tonal"
+                          color="error"
+                          prepend-icon="mdi-delete"
+                          :disabled="plugin.reserved"
+                          @click="requestRemoveBrokenPlugin(plugin.dir_name)"
+                        >
+                          {{ tm("buttons.remove") }}
                         </v-btn>
                       </td>
                     </tr>

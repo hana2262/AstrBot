@@ -19,6 +19,17 @@
       "error": "Error"
     }
   },
+  "brokenPlugins": {
+    "title": "Broken Plugins ({count})",
+    "hint": "These plugin directories are incomplete or missing entry files and cannot be loaded.",
+    "columns": {
+      "plugin": "Plugin",
+      "reason": "Reason"
+    },
+    "reasons": {
+      "missingEntryFile": "Missing entry file"
+    }
+  },
   "search": {
     "placeholder": "Search extensions...",
     "marketPlaceholder": "Search market extensions..."
@@ -32,6 +43,7 @@
     "hideSystemPlugins": "Hide System Extensions",
     "install": "Install",
     "uninstall": "Uninstall",
+    "remove": "Remove",
     "update": "Update",
     "reload": "Reload",
     "enable": "Enable",
@@ -44,6 +56,7 @@
     "save": "Save",
     "saveAndClose": "Save and Close",
     "cancel": "Cancel",
+    "confirm": "Confirm",
     "actions": "Actions",
     "back": "Back",
     "selectFile": "Select File",
@@ -194,6 +207,7 @@
     "addSuccess": "Add successful!",
     "saveSuccess": "Save successful!",
     "deleteSuccess": "Delete successful!",
+    "removeSuccess": "Removed successfully",
     "installing": "Installing extension from file",
     "installingFromUrl": "Installing extension from URL...",
     "installFailed": "Extension installation failed:",

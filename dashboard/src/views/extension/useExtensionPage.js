@@ -512,16 +512,60 @@ export const useExtensionPage = () => {
   const failedPluginItems = computed(() =>
     buildFailedPluginItems(failedPluginsDict.value),
   );
-  
+
+  // 损坏插件列表
+  const brokenPluginsList = ref([]);
+
+  // 获取损坏插件
+  const getBrokenPlugins = async () => {
+    try {
+      const res = await axios.get("/api/plugin/get-broken-plugins");
+      brokenPluginsList.value = res.data.data || [];
+    } catch (err) {
+      console.error("获取损坏插件失败:", err);
+    }
+  };
+
+  // 卸载确认弹窗选项
+  const uninstallOptions = reactive({
+    deleteConfig: false,
+    deleteData: false,
+  });
+
+  // 重置弹窗选项（统一清理函数）
+  const resetUninstallOptions = () => {
+    uninstallOptions.deleteConfig = false;
+    uninstallOptions.deleteData = false;
+  };
+
+  // 请求移除损坏插件
+  const requestRemoveBrokenPlugin = (dirName) => {
+    const plugin = brokenPluginsList.value.find(p => p.dir_name === dirName);
+    if (!plugin) return;
+
+    resetUninstallOptions();  // 重置选项
+
+    uninstallTarget.value = {
+      kind: "broken",
+      id: dirName,
+      name: plugin.display_name || dirName,
+      reserved: plugin.reserved
+    };
+    showUninstallDialog.value = true;
+  };
+
   const getExtensions = async () => {
     loading_.value = true;
     try {
-      const res = await axios.get("/api/plugin/get");   
+      const res = await axios.get("/api/plugin/get");
       Object.assign(extension_data, res.data);
-      
-      const failRes = await axios.get("/api/plugin/source/get-failed-plugins");    
+
+      const failRes = await axios.get("/api/plugin/source/get-failed-plugins");
       failedPluginsDict.value = failRes.data.data || {};
-      
+
+      // 获取损坏插件
+      await getBrokenPlugins();
+
       checkUpdate();
     } catch (err) {
       toast(err, "error");
@@ -683,10 +727,31 @@ export const useExtensionPage = () => {
     if (!target) return;
 
     try {
-      await uninstall(target, { ...(options || {}), skipConfirm: true });
+      if (target.kind === "broken") {
+        // 损坏插件卸载逻辑
+        const res = await axios.post("/api/plugin/remove-broken-plugin", {
+          dir_name: target.id,
+          delete_config: options?.deleteConfig || false,
+          delete_data: options?.deleteData || false,
+        });
+
+        if (res.data.status === "error") {
+          toast(res.data.message || tm("messages.operationFailed"), "error");
+          return;
+        }
+
+        toast(res.data.message || tm("messages.removeSuccess"), "success");
+        await getBrokenPlugins();
+      } else {
+        // 复用现有卸载逻辑
+        await uninstall(target, { ...(options || {}), skipConfirm: true });
+      }
+    } catch (err) {
+      toast(resolveErrorMessage(err, tm("messages.operationFailed")), "error");
     } finally {
       uninstallTarget.value = null;
       showUninstallDialog.value = false;
+      resetUninstallOptions();  // 关闭弹窗时统一重置选项
     }
   };
   
@@ -1538,6 +1603,7 @@ export const useExtensionPage = () => {
     versionCompatibilityDialog,
     showUninstallDialog,
     uninstallTarget,
+    uninstallOptions,
     showSourceDialog,
     showSourceManagerDialog,
     sourceName,
@@ -1586,6 +1652,7 @@ export const useExtensionPage = () => {
     onLoadingDialogResult,
     failedPluginsDict,
     failedPluginItems,
+    brokenPluginsList,
     getExtensions,
     handleReloadAllFailed,
     reloadFailedPlugin,
@@ -1593,6 +1660,7 @@ export const useExtensionPage = () => {
     uninstallExtension,
     requestUninstallPlugin,
     requestUninstallFailedPlugin,
+    requestRemoveBrokenPlugin,
     handleUninstallConfirm,
     updateExtension,
     showUpdateAllConfirm,

@@ -19,6 +19,17 @@
       "error": "错误"
     }
   },
+  "brokenPlugins": {
+    "title": "损坏插件 ({count})",
+    "hint": "这些插件目录不完整或缺少入口文件，无法加载。",
+    "columns": {
+      "plugin": "插件",
+      "reason": "损坏原因"
+    },
+    "reasons": {
+      "missingEntryFile": "缺少入口文件"
+    }
+  },
   "search": {
     "placeholder": "搜索插件...",
     "marketPlaceholder": "搜索市场插件..."
@@ -32,6 +43,7 @@
     "hideSystemPlugins": "隐藏系统插件",
     "install": "安装",
     "uninstall": "卸载",
+    "remove": "移除",
     "update": "更新",
     "reload": "重载",
     "enable": "启用",
@@ -44,6 +56,7 @@
     "save": "保存",
     "saveAndClose": "保存并关闭",
     "cancel": "取消",
+    "confirm": "确认",
     "actions": "操作",
     "back": "返回",
     "selectFile": "选择文件",
@@ -194,6 +207,7 @@
     "addSuccess": "添加成功!",
     "saveSuccess": "保存成功!",
     "deleteSuccess": "删除成功!",
+    "removeSuccess": "移除成功",
     "installing": "正在从文件安装插件",
     "installingFromUrl": "正在从链接安装插件...",
     "installFailed": "安装插件失败:",
