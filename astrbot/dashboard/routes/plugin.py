@@ -408,13 +408,15 @@ class PluginRoute(Route):
         # 移除敏感字段，仅返回必要信息
         plugins = []
         for dir_name, info in self.plugin_manager.broken_plugin_dict.items():
-            plugins.append({
-                "dir_name": dir_name,
-                "name": info.get("name"),
-                "display_name": info.get("display_name"),
-                "reason": info.get("reason"),
-                "reserved": info.get("reserved", False),
-            })
+            plugins.append(
+                {
+                    "dir_name": dir_name,
+                    "name": info.get("name"),
+                    "display_name": info.get("display_name"),
+                    "reason": info.get("reason"),
+                    "reserved": info.get("reserved", False),
+                }
+            )
         return Response().ok(plugins).__dict__
 
     async def remove_broken_plugin(self):

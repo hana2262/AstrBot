@@ -194,22 +194,28 @@ class PluginManager:
 
                 if os.path.exists(main_file):
                     module_str = "main"
-                    modules.append({
-                        "pname": d,
-                        "module": module_str,
-                        "module_path": os.path.join(dir_path, module_str),
-                        "reserved": is_reserved,  # 添加 reserved 字段
-                    })
+                    modules.append(
+                        {
+                            "pname": d,
+                            "module": module_str,
+                            "module_path": os.path.join(dir_path, module_str),
+                            "reserved": is_reserved,  # 添加 reserved 字段
+                        }
+                    )
                 elif os.path.exists(module_file):
                     module_str = d
-                    modules.append({
-                        "pname": d,
-                        "module": module_str,
-                        "module_path": module_file,
-                        "reserved": is_reserved,  # 添加 reserved 字段
-                    })
+                    modules.append(
+                        {
+                            "pname": d,
+                            "module": module_str,
+                            "module_path": module_file,
+                            "reserved": is_reserved,  # 添加 reserved 字段
+                        }
+                    )
                 else:
-                    logger.info(f"插件 {d} 未找到 main.py 或者 {d}.py，记录为损坏插件。")
+                    logger.info(
+                        f"插件 {d} 未找到 main.py 或者 {d}.py，记录为损坏插件。"
+                    )
 
                     # 记录到 broken_plugin_dict
                     broken_info = {
@@ -223,7 +229,7 @@ class PluginManager:
                     metadata_path = os.path.join(dir_path, "metadata.yaml")
                     if os.path.exists(metadata_path):
                         try:
-                            with open(metadata_path, 'r', encoding='utf-8') as f:
+                            with open(metadata_path, "r", encoding="utf-8") as f:
                                 metadata = yaml.safe_load(f)
                                 broken_info["display_name"] = metadata.get("name", d)
                         except Exception:
@@ -244,7 +250,9 @@ class PluginManager:
             except (OSError, RuntimeError) as e:
                 logger.warning(f"无法规范化保留插件路径: {e}")
                 self._normalized_reserved_path = False  # False 表示无法获取
-        return self._normalized_reserved_path if self._normalized_reserved_path else None
+        return (
+            self._normalized_reserved_path if self._normalized_reserved_path else None
+        )
 
     def _is_reserved_path(self, dir_path, normalized_reserved_path):
         """判断路径是否为保留插件目录
@@ -263,7 +271,10 @@ class PluginManager:
             try:
                 plugin_resolved = Path(dir_path).resolve(strict=False)
                 # 比较规范化后的路径字符串（忽略大小写）
-                return str(plugin_resolved).lower() == str(normalized_reserved_path).lower()
+                return (
+                    str(plugin_resolved).lower()
+                    == str(normalized_reserved_path).lower()
+                )
             except (OSError, ValueError, RuntimeError):
                 # 路径解析失败，保守处理为非保留插件
                 logger.debug(f"路径比较失败: {dir_path}, 错误: {e}")
@@ -1402,7 +1413,7 @@ class PluginManager:
         is_reserved = broken_info.get("reserved", False)
         plugin_path = os.path.join(
             self.reserved_plugin_path if is_reserved else self.plugin_store_path,
-            dir_name
+            dir_name,
         )
 
         # 实际删除操作（这部分需要持锁）
